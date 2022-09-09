@@ -19,12 +19,17 @@ else:
 
 BASE_URL = 'https://www.leagueofgraphs.com'
 HERO_ITEMS_URL = 'https://www.leagueofgraphs.com/ru/champions/items/{hero_slug}'
+HERO_SPELLS_URL = 'https://www.leagueofgraphs.com/ru/champions/spells/{hero_slug}'
 
 
 def get_html(url: str) -> str:
 	driver.get(url)
 
 	return driver.page_source
+
+
+def get_progressbar_value(td: element.Tag):
+	return td.find('progressbar').attrs['data-value']
 
 
 class Item:
@@ -101,8 +106,10 @@ class Hero:
 		items = []
 
 		for row in rows:
+			cols = row.find_all('td')
+
 			# Icons
-			icons_block = row.find_all('td')[0]
+			icons_block = cols[0]
 			items_icon_img = icons_block.find_all('img', attrs={'class': 'requireTooltip'})
 			row_items = []
 
@@ -119,12 +126,10 @@ class Hero:
 					bias=(0, 0)))
 
 			# Popularity
-			popularity_block = row.find_all('td')[1]
-			popularity_value = popularity_block.find('progressbar').attrs['data-value']
+			popularity_value = get_progressbar_value(cols[1])
 
 			# Win rate
-			win_rate_block = row.find_all('td')[2]
-			win_rate_value = win_rate_block.find('progressbar').attrs['data-value']
+			win_rate_value = get_progressbar_value(cols[2])
 
 			items_collection = {
 				'items': row_items,
@@ -135,8 +140,34 @@ class Hero:
 		return items
 
 	def _get_spells(self) -> list:
-		spells = self.parser.find_all('div', attrs={'class': 'championSpell'})
-		print(spells)
+		spells = []
+		spells_parser = items_parser = bs(get_html(
+			HERO_SPELLS_URL.format(hero_slug=self.slug)),
+			'html.parser')
+
+		table = spells_parser.find('table', attrs={'class': 'data_table sortable_table'})
+		rows = table.find_all('tr')[1:]
+
+		for row in rows:
+			cols = row.find_all('td')[1:]
+
+			# Spells
+			spells_col = cols[0].find_all('img')
+			spells_names = [img.attrs['alt'] for img in spells_col]
+
+			# Popularity
+			popularity_value = get_progressbar_value(cols[1])
+
+			# Win rate
+			win_rate_value = get_progressbar_value(cols[2])
+
+			row_spells = {
+				'spells': spells_names,
+				'popularity': popularity_value,
+				'win_rate': win_rate_value}
+			spells.append(row_spells)
+
+		return spells
 
 
 class HeroesListParser:
@@ -189,8 +220,8 @@ def main():
 	)
 	print(kindred)
 	all_stats = kindred.get_statistics()
-	# for key, value in all_stats.items():
-	# 	print(key, value)
+	for key, value in all_stats.items():
+		print(key, value)
 
 
 if __name__ == '__main__':
