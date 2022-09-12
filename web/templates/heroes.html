@@ -1,5 +1,37 @@
 {% extends "base.html" %}
 
+{% block title %}
+	<title>{{ title }}</title>
+	<link rel="stylesheet" type="text/css" href="../static/css/heroes.css">
+{% endblock %}
+
 {% block content %}
-	<h1>:D</h1>
+	<header>
+		<div class="container">
+			<div class="row">
+				<div class="col-4">
+					<h1>USBAM</h1>
+				</div>
+				<div class="col-8">
+					
+				</div>
+			</div>
+		</div>
+	</header>
+	<div class="heroes-list container">
+		{% for hero in heroes %}
+			<div class="hero row">
+				<div class="hero-icon col-2">
+					<img src="">
+				</div>
+				<div class="hero-name col-6">
+					{{ hero.name }}
+				</div>
+				<div class="hero-line col-4">
+					{{ hero.line }}
+				</div>
+			</div>
+		{% endfor %}
+		</div>
+	</div>
 {% endblock %}

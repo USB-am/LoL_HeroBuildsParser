@@ -6,7 +6,7 @@ from bs4 import element
 from bs4 import BeautifulSoup as bs
 
 
-STATUS = 'browser'
+STATUS = 'not browser'
 if STATUS == 'browser':
 	driver = webdriver.Chrome(ChromeDriverManager().install())
 else:
