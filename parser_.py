@@ -21,8 +21,19 @@ else:
 
 BASE_URL = 'https://www.leagueofgraphs.com'
 BUILDS_URL = 'https://www.leagueofgraphs.com/ru/champions/builds'
-HERO_ITEMS_URL = 'https://www.leagueofgraphs.com/ru/champions/items/{hero_slug}'
-HERO_SPELLS_URL = 'https://www.leagueofgraphs.com/ru/champions/spells/{hero_slug}'
+HERO_BUILD_URL = 'https://www.leagueofgraphs.com/ru/champions/builds/{slug}/{line}/{mode}'
+HERO_ITEMS_URL = 'https://www.leagueofgraphs.com/ru/champions/items/{slug}/{line}/{mode}'
+HERO_SPELLS_URL = 'https://www.leagueofgraphs.com/ru/champions/spells/{slug}/{line}/{mode}'
+HERO_RUNES_URL = 'https://www.leagueofgraphs.com/ru/champions/runes/{slug}/{line}/{mode}'
+
+
+LINES = {
+	'Топ': 'top',
+	'Лес': 'jungle',
+	'Мид': 'middle',
+	'Бот': 'adc',
+	'Поддержка': 'support',
+}
 
 
 def get_html(url: str) -> str:
@@ -31,7 +42,7 @@ def get_html(url: str) -> str:
 	return driver.page_source
 
 
-def get_progressbar_value(td: element.Tag):
+def get_progressbar_value(td: element.Tag) -> float:
 	return float(td.find('progressbar').attrs['data-value'])
 
 
@@ -43,26 +54,173 @@ def get_table(soup, class_: str) -> Generator:
 		yield row
 
 
+def get_table_content(table: element.Tag) -> list:
+	rows = table.find_all('tr')[1:-1]
+	output = []
+
+	for row in rows:
+		cols = row.find_all('td')
+		*raw_data, popularity, win_rate = cols
+		output.append({
+			'raw_data': raw_data,
+			'popularity': get_progressbar_value(popularity),
+			'win_rate': get_progressbar_value(win_rate),
+		})
+
+	return output
+
+
+def get_items_from_table(td: element.Tag) -> list:
+	output = []
+	imgs = td[0].find_all('img')
+
+	for img in imgs:
+		output.append(img.attrs['alt'])
+
+	return output
+
+
+def get_spells_from_table(td: element.Tag) -> list:
+	output = []
+	imgs = td[1].find_all('img')
+
+	for img in imgs:
+		output.append(img.attrs['alt'])
+
+	return output
+
+
+def get_runes_from_table(td: element.Tag) -> list:
+	rune_rows = get_table(td[0], 'data_table')
+	[print(row) for row in rune_rows]
+
+
 def get_block_content(block: element.Tag) -> str:
 	return block.text.strip()
 
 
-class Hero(object):
+class HeroParser(object):
+	''' Парсит информацию о чемпионе '''
+
+	def __init__(self, url: str):
+		self.url = url
+
+		self._parser = None
+
+	@property
+	def parser(self):
+		if self._parser is None:
+			html = get_html(self.url)
+			self._parser = bs(html, 'html.parser')
+
+		return self._parser
+
+	def get_all(self) -> dict:
+		return {
+			# 'skills': self.get_skills(),
+			# 'items': self.get_items(),
+			# 'spells': self.get_spells(),
+			'runes': self.get_runes(),
+		}
+
+	def get_skills(self) -> list:
+		output = []
+
+		table = self.parser.find('table', attrs={'class': 'skillsOrdersTableSmall'})
+		rows = table.find_all('tr')
+
+		for row in rows:
+			output.append([])
+
+			# First column - skill icon
+			cols = row.find_all('td')[1:]
+
+			for col in cols:
+				content = get_block_content(col)
+				output[-1].append(content in ('Q', 'W', 'E', 'R'))
+
+		return output
+
+	def get_items(self) -> dict:
+		output = {}
+		items_url = HERO_ITEMS_URL.format(
+			slug=self.slug, line=LINES[self.lines[0]], mode=self.mode)
+		items_parser = bs(get_html(items_url), 'html.parser')
+
+		tables = items_parser.find_all('table', attrs={'class': 'data_table'})[:5]
+		table_titles = ('start', 'main', 'late', 'boots', 'global')
+		for title, table in zip(table_titles, tables):
+			raw_table_data = get_table_content(table)
+			output[title] = []
+
+			for row in raw_table_data:
+				raw_data = row['raw_data']
+				items = get_items_from_table(raw_data)
+				output[title].append({
+					'items': items,
+					'popularity': row['popularity'],
+					'win_rate': row['win_rate'],
+				})
+
+		return output
+
+	def get_spells(self) -> list:
+		output = []
+
+		spells_url = HERO_SPELLS_URL.format(
+			slug=self.slug, line=LINES[self.lines[0]], mode=self.mode)
+		spells_parser = bs(get_html(spells_url), 'html.parser')
+
+		table = spells_parser.find('table', attrs={'class': 'data_table'})
+		rows = get_table_content(table)
+		for row in rows:
+			spells = get_spells_from_table(row['raw_data'])
+			output.append({
+				'spells': spells,
+				'popularity': row['popularity'],
+				'win_rate': row['win_rate'],
+			})
+
+		return output
+
+	def get_runes(self) -> list:
+		output = []
+
+		runes_url = HERO_RUNES_URL.format(
+			slug=self.slug, line=LINES[self.lines[0]], mode=self.mode)
+		runes_parser = bs(get_html(runes_url), 'html.parser')
+
+		tables = runes_parser.find_all('table', attrs={'class': 'perksTableContainerTable'})
+		for table in tables:
+			print(table)
+			input('Press Enter')
+			raw_table_data = get_table_content(table)
+			runes = get_runes_from_table(raw_table_data)
+
+
+class Hero(HeroParser):
 	def __init__(self, name: str, slug: str, position: str, \
 	             popularity: float, win_rate: float, blocks: float, kda: dict, \
-	             pentakills: float):
+	             pentakills: float, mode: str='sr-ranked'):
 
 		self.name = name
 		self.slug = slug
 		self.link = None
 		self.position = position
+		self.lines = position.split(', ')
 		self.popularity = popularity
 		self.win_rate = win_rate
 		self.blocks = blocks
 		self.kda = kda
 		self.pentakills = pentakills
+		self.mode = mode
 
-		self.parser = None
+		url = HERO_BUILD_URL.format(
+			slug=self.slug, line=LINES[self.lines[0]], mode=self.mode)
+		super().__init__(url)
+
+	def __str__(self):
+		return f'{self.name} [{self.position}]'
 
 
 class HeroesListParser(object):
@@ -75,6 +233,8 @@ class HeroesListParser(object):
 		heroes_list_table = get_table(soup, 'data_table')
 		heroes_list = [self._create_hero(hero_row) \
 			for hero_row in heroes_list_table]
+
+		return heroes_list
 
 	def _create_hero(self, hero_row: element.Tag) -> Hero:
 		tds = hero_row.find_all('td')[1:]
@@ -95,7 +255,7 @@ class HeroesListParser(object):
 			'pentakills': float(get_block_content(pentakills))
 		}
 
-		print(f'{hero_stats}')
+		return Hero(**hero_stats)
 
 	def __get_hero_name(self, block: element.Tag) -> str:
 		return get_block_content(block.find('span', attrs={'class': 'name'}))
@@ -123,21 +283,13 @@ class HeroesListParser(object):
 
 
 def main():
-	heroes_list_parser = HeroesListParser()
-	heroes = heroes_list_parser.get_heroes_list()
+	# heroes_list_parser = HeroesListParser()
+	# heroes = heroes_list_parser.get_heroes_list()
 
-	'''
-	kindred = list(filter(lambda h: h.name == 'Варвик', heroes))[0]
-	kindred = Hero(
-		link='https://www.leagueofgraphs.com/ru/champions/builds/kindred',
-		name='Киндред',
-		line='jungle'
-	)
-	print(kindred)
-	all_stats = kindred.get_statistics()
-	for key, value in all_stats.items():
-		print(key, value)
-	'''
+	# hero = heroes[0]
+	hero = Hero(name='Киндред', slug='kindred', position='Лес', popularity=0,
+		win_rate=0, blocks=0, kda=0, pentakills=0)
+	print(hero.get_all())
 
 
 if __name__ == '__main__':
