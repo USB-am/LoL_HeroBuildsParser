@@ -90,9 +90,17 @@ def get_spells_from_table(td: element.Tag) -> list:
 	return output
 
 
-def get_runes_from_table(td: element.Tag) -> list:
-	rune_rows = get_table(td[0], 'data_table')
-	[print(row) for row in rune_rows]
+def get_runes_from_table(items: element.Tag) -> list:
+	output = []
+
+	for col in items:
+		imgs = col.find_all('img')
+
+		for img in imgs:
+			if img.attrs.get('style', '').strip() in 'opacity: 1;':
+				output.append(img.attrs['alt'])
+
+	return output
 
 
 def get_block_content(block: element.Tag) -> str:
@@ -120,7 +128,7 @@ class HeroParser(object):
 			# 'skills': self.get_skills(),
 			# 'items': self.get_items(),
 			# 'spells': self.get_spells(),
-			'runes': self.get_runes(),
+			# 'runes': self.get_runes(),
 		}
 
 	def get_skills(self) -> list:
@@ -182,6 +190,7 @@ class HeroParser(object):
 			})
 
 		return output
+# Чтобы было что-то новое, надо что-то сломать
 
 	def get_runes(self) -> list:
 		output = []
@@ -192,10 +201,16 @@ class HeroParser(object):
 
 		tables = runes_parser.find_all('table', attrs={'class': 'perksTableContainerTable'})
 		for table in tables:
-			print(table)
-			input('Press Enter')
-			raw_table_data = get_table_content(table)
-			runes = get_runes_from_table(raw_table_data)
+			row = table.find_all('tr')[1]
+			*raw_data, popularity, win_rate = row.find_all('td')
+
+			output.append({
+				'runes': get_runes_from_table(raw_data),
+				'popularity': get_progressbar_value(popularity),
+				'win_rate': get_progressbar_value(win_rate),
+			})
+
+		return output
 
 
 class Hero(HeroParser):
